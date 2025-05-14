@@ -65,7 +65,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/triedb"
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -137,7 +136,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
-	// Assemble the Ethereum object
 	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false, false, false)
 	if err != nil {
 		return nil, err
@@ -153,7 +151,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	}
 
-	// START: Bor changes
+	// Here we determine active ChainConfig.
+	chainConfig, err := core.LoadChainConfig(chainDb, config.Genesis)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assemble the Ethereum object.
 	eth := &Ethereum{
 		config:            config,
 		chainDb:           chainDb,
@@ -172,6 +176,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		closeCh:           make(chan struct{}),
 	}
 
+	// START: Bor changes
 	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
 		log.Info("------Unprotected transactions allowed-------")
@@ -179,20 +184,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	gpoParams := config.GPO
-
-	// Override the chain config with provided settings.
-	var overrides core.ChainOverrides
-	if config.OverrideCancun != nil {
-		overrides.OverrideCancun = config.OverrideCancun
-	}
-	if config.OverrideVerkle != nil {
-		overrides.OverrideVerkle = config.OverrideVerkle
-	}
-
-	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, triedb.NewDatabase(chainDb, triedb.HashDefaults), config.Genesis, &overrides)
-	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
-		return nil, genesisErr
-	}
 
 	blockChainAPI := ethapi.NewBlockChainAPI(eth.APIBackend)
 	engine, err := ethconfig.CreateConsensusEngine(chainConfig, config, chainDb, blockChainAPI)
@@ -251,6 +242,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	checker := whitelist.NewService(chainDb)
 
+	// Override the chain config with provided settings.
+	var overrides core.ChainOverrides
+	if config.OverrideCancun != nil {
+		overrides.OverrideCancun = config.OverrideCancun
+	}
+	if config.OverrideVerkle != nil {
+		overrides.OverrideVerkle = config.OverrideVerkle
+	}
+
 	// check if Parallel EVM is enabled
 	// if enabled, use parallel state processor
 	if config.ParallelEVM.Enable {
@@ -265,7 +265,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	_ = eth.engine.VerifyHeader(eth.blockchain, eth.blockchain.CurrentHeader()) // TODO think on it
+	// bor: this is nor present in geth
+	/*
+		_ = eth.engine.VerifyHeader(eth.blockchain, eth.blockchain.CurrentHeader()) // TODO think on it
+	*/
 
 	// BOR changes
 	eth.APIBackend.gpo.ProcessCache()
@@ -296,6 +299,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
 	if eth.handler, err = newHandler(&handlerConfig{
+		NodeID:              eth.p2pServer.Self().ID(),
 		Database:            chainDb,
 		Chain:               eth.blockchain,
 		TxPool:              eth.txPool,
