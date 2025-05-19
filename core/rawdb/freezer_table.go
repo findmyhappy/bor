@@ -735,6 +735,7 @@ func (t *freezerTable) sizeHidden() (uint64, error) {
 
 // truncateTail discards any recent data before the provided threshold number.
 func (t *freezerTable) truncateTail(items uint64) error {
+	log.Info("PSP - truncateTail", "table-name", t.name, "items", items)
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

@@ -84,6 +84,10 @@ type Freezer struct {
 // The 'tables' argument defines the data tables. If the value of a map
 // entry is true, snappy compression is disabled for the table.
 func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]freezerTableConfig) (*Freezer, error) {
+	log.Info("PSP - NewFreezer", "datadir", datadir, "namespace", namespace, "readonly", readonly, "offset", offset, "maxTableSize", maxTableSize)
+	for name, config := range tables {
+		log.Info("PSP - NewFreezer", "table-name", name, "config", config)
+	}
 	// Create the initial freezer object
 	var (
 		readMeter  = metrics.NewRegisteredMeter(namespace+"ancient/read", nil)
@@ -134,6 +138,7 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 				table.Close()
 			}
 			lock.Unlock()
+			log.Info("PSP - NewFreezer", "table-name", name, "error", err)
 			return nil, err
 		}
 		freezer.tables[name] = table
@@ -144,6 +149,7 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 		// validate also sets `freezer.frozen`.
 		err = freezer.validate()
 	} else {
+		log.Info("PSP - NewFreezer", "repairing")
 		// Truncate all tables to common length.
 		err = freezer.repair()
 	}
@@ -414,27 +420,34 @@ func (f *Freezer) repair() error {
 	)
 	// get the minimal head and the maximum tail
 	for _, table := range f.tables {
+		log.Info("PSP - repair", "table-name", table.name, "table.items.Load()", table.items.Load(), "table.itemHidden.Load()", table.itemHidden.Load())
 		head = min(head, table.items.Load())
 		prunedTail = max(prunedTail, table.itemHidden.Load())
 	}
+	log.Info("PSP - repair", "head", head, "prunedTail", prunedTail)
 	// apply the pruning
 	for kind, table := range f.tables {
 		// all tables need to have the same head
+		log.Info("PSP - repair - calling truncateHead")
 		if err := table.truncateHead(head); err != nil {
 			return err
 		}
 		if !table.config.prunable {
+			log.Info("PSP - repair - non-prunable tables have to start at 0")
 			// non-prunable tables have to start at 0
 			if table.itemHidden.Load() != 0 {
 				panic(fmt.Sprintf("non-prunable freezer table %s has non-zero tail: %v", kind, table.itemHidden.Load()))
 			}
 		} else {
+			log.Info("PSP - repair - prunable tables have to have the same length")
 			// prunable tables have to have the same length
 			if err := table.truncateTail(prunedTail); err != nil {
 				return err
 			}
 		}
 	}
+
+	log.Info("PSP - repair - returning nil")
 
 	f.frozen.Store(head)
 	f.tail.Store(prunedTail)

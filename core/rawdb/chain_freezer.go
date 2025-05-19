@@ -63,14 +63,17 @@ func NewChainFreezer(datadir string, namespace string, readonly bool, offset uin
 //   - if non-empty directory is given, initializes the regular file-based
 //     state freezer.
 func newChainFreezer(datadir string, namespace string, readonly bool, offset uint64) (*chainFreezer, error) {
+	log.Info("PS - in newChainFreezer")
 	var (
 		err     error
 		freezer ethdb.AncientStore
 	)
 
 	if datadir == "" {
+		log.Info("PS - datadir is empty")
 		freezer = NewMemoryFreezer(readonly, chainFreezerTableConfigs)
 	} else {
+		log.Info("PS - datadir is not empty")
 		freezer, err = NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerTableConfigs)
 	}
 
