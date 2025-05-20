@@ -53,7 +53,7 @@ type chainFreezer struct {
 // NewChainFreezer is a small utility method around NewFreezer that sets the
 // default parameters for the chain storage.
 func NewChainFreezer(datadir string, namespace string, readonly bool, offset uint64) (*Freezer, error) {
-	return NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerTableConfigs)
+	return NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerNoSnappy)
 }
 
 // newChainFreezer initializes the freezer for ancient chain segment.
@@ -71,10 +71,10 @@ func newChainFreezer(datadir string, namespace string, readonly bool, offset uin
 
 	if datadir == "" {
 		log.Info("PS - datadir is empty")
-		freezer = NewMemoryFreezer(readonly, chainFreezerTableConfigs)
+		freezer = NewMemoryFreezer(readonly, chainFreezerNoSnappy)
 	} else {
 		log.Info("PS - datadir is not empty")
-		freezer, err = NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerTableConfigs)
+		freezer, err = NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerNoSnappy)
 	}
 
 	if err != nil {

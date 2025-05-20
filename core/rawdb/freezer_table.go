@@ -102,11 +102,11 @@ type freezerTable struct {
 	// should never be lower than itemOffset.
 	itemHidden atomic.Uint64
 
-	config      freezerTableConfig // if true, disables snappy compression. Note: does not work retroactively
-	readonly    bool
-	maxFileSize uint32 // Max file size for data-files
-	name        string
-	path        string
+	noCompression bool // if true, disables snappy compression. Note: does not work retroactively
+	readonly      bool
+	maxFileSize   uint32 // Max file size for data-files
+	name          string
+	path          string
 
 	head   *os.File            // File descriptor for the data head of the table
 	index  *os.File            // File descriptor for the indexEntry file of the table
@@ -127,21 +127,21 @@ type freezerTable struct {
 }
 
 // newFreezerTable opens the given path as a freezer table.
-func newFreezerTable(path, name string, config freezerTableConfig, readonly bool) (*freezerTable, error) {
-	return newTable(path, name, metrics.NewInactiveMeter(), metrics.NewInactiveMeter(), metrics.NewGauge(), freezerTableSize, config, readonly)
+func newFreezerTable(path, name string, disableSnappy, readonly bool) (*freezerTable, error) {
+	return newTable(path, name, metrics.NewInactiveMeter(), metrics.NewInactiveMeter(), metrics.NewGauge(), freezerTableSize, disableSnappy, readonly)
 }
 
 // newTable opens a freezer table, creating the data and index files if they are
 // non-existent. Both files are truncated to the shortest common length to ensure
 // they don't go out of sync.
-func newTable(path string, name string, readMeter, writeMeter *metrics.Meter, sizeGauge *metrics.Gauge, maxFilesize uint32, config freezerTableConfig, readonly bool) (*freezerTable, error) {
+func newTable(path string, name string, readMeter, writeMeter *metrics.Meter, sizeGauge *metrics.Gauge, maxFilesize uint32, noCompression, readonly bool) (*freezerTable, error) {
 	// Ensure the containing directory exists and open the indexEntry file
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
 
 	var idxName string
-	if config.noSnappy {
+	if noCompression {
 		idxName = fmt.Sprintf("%s.ridx", name) // raw index file
 	} else {
 		idxName = fmt.Sprintf("%s.cidx", name) // compressed index file
@@ -183,19 +183,19 @@ func newTable(path string, name string, readMeter, writeMeter *metrics.Meter, si
 	}
 	// Create the table and repair any past inconsistency
 	tab := &freezerTable{
-		index:       index,
-		metadata:    metadata,
-		lastSync:    time.Now(),
-		files:       make(map[uint32]*os.File),
-		readMeter:   readMeter,
-		writeMeter:  writeMeter,
-		sizeGauge:   sizeGauge,
-		name:        name,
-		path:        path,
-		logger:      log.New("database", path, "table", name),
-		config:      config,
-		readonly:    readonly,
-		maxFileSize: maxFilesize,
+		index:         index,
+		metadata:      metadata,
+		lastSync:      time.Now(),
+		files:         make(map[uint32]*os.File),
+		readMeter:     readMeter,
+		writeMeter:    writeMeter,
+		sizeGauge:     sizeGauge,
+		name:          name,
+		path:          path,
+		logger:        log.New("database", path, "table", name),
+		noCompression: noCompression,
+		readonly:      readonly,
+		maxFileSize:   maxFilesize,
 	}
 	if err := tab.repair(); err != nil {
 		tab.Close()
@@ -917,7 +917,7 @@ func (t *freezerTable) openFile(num uint32, opener func(string) (*os.File, error
 	var exist bool
 	if f, exist = t.files[num]; !exist {
 		var name string
-		if t.config.noSnappy {
+		if t.noCompression {
 			name = fmt.Sprintf("%s.%04d.rdat", t.name, num)
 		} else {
 			name = fmt.Sprintf("%s.%04d.cdat", t.name, num)
@@ -1046,13 +1046,13 @@ func (t *freezerTable) RetrieveItems(start, count, maxBytes uint64) ([][]byte, e
 		offset += diskSize
 
 		decompressedSize := diskSize
-		if !t.config.noSnappy {
+		if !t.noCompression {
 			decompressedSize, _ = snappy.DecodedLen(item)
 		}
 		if i > 0 && maxBytes != 0 && uint64(outputSize+decompressedSize) > maxBytes {
 			break
 		}
-		if !t.config.noSnappy {
+		if !t.noCompression {
 			data, err := snappy.Decode(nil, item)
 			if err != nil {
 				return nil, err
