@@ -84,6 +84,7 @@ type Freezer struct {
 // The 'tables' argument defines the data tables. If the value of a map
 // entry is true, snappy compression is disabled for the table.
 func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]bool) (*Freezer, error) {
+	fmt.Println("PSP - NewFreezer", "datadir", datadir, "namespace", namespace, "readonly", readonly, "offset", offset, "maxTableSize", maxTableSize, "tables", tables)
 	// Create the initial freezer object
 	var (
 		readMeter  = metrics.NewRegisteredMeter(namespace+"ancient/read", nil)
@@ -134,12 +135,20 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 		}
 		freezer.tables[name] = table
 	}
+
+	fmt.Println("PSP - NewFreezer - tables created")
+
+	for _, table := range freezer.tables {
+		fmt.Println("PSP - NewFreezer - table", table.name, "items", table.items.Load(), "itemHidden", table.itemHidden.Load())
+	}
+
 	var err error
 	if freezer.readonly {
 		// In readonly mode only validate, don't truncate.
 		// validate also sets `freezer.frozen`.
 		err = freezer.validate()
 	} else {
+		fmt.Println("PSP - New Freezer - repair")
 		// Truncate all tables to common length.
 		err = freezer.repair()
 	}
