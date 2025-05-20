@@ -390,6 +390,11 @@ func (f *Freezer) repair() error {
 		head = uint64(math.MaxUint64)
 		tail = uint64(0)
 	)
+
+	for _, table := range f.tables {
+		log.Info("PSP - repair", "table-name", table.name, "table.items.Load()", table.items.Load(), "table.itemHidden.Load()", table.itemHidden.Load())
+	}
+
 	for _, table := range f.tables {
 		items := table.items.Load()
 		if head > items {
@@ -400,6 +405,7 @@ func (f *Freezer) repair() error {
 			tail = hidden
 		}
 	}
+	fmt.Println("PSP - repair", "head", head, "tail", tail)
 	for _, table := range f.tables {
 		if err := table.truncateHead(head); err != nil {
 			return err
