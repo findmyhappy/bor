@@ -1193,6 +1193,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.StateScheme = "hash"
 	}
 
+	fmt.Println("PSP - n.StateScheme", n.StateScheme)
+
 	// snapshot disable check
 	if !c.Snapshot {
 		if n.SyncMode == downloader.SnapSync {

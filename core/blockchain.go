@@ -326,6 +326,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	}
 	// Open trie database with provided config
 	enableVerkle, err := EnableVerkleAtGenesis(db, genesis)
+	fmt.Println("PSP - in NewBlockChain - enableVerkle", enableVerkle)
 	if err != nil {
 		return nil, err
 	}
@@ -554,6 +555,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compatErr != nil {
+		fmt.Println("PSP - in NewBlockChain - compatErr", compatErr)
 		log.Warn("Rewinding chain to upgrade configuration", "err", compatErr)
 		if compatErr.RewindToTime > 0 {
 			bc.SetHeadWithTimestamp(compatErr.RewindToTime)
